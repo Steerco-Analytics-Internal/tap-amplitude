@@ -1,0 +1,38 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "tap discover",
+            "type": "python",
+            "request": "launch",
+            "program": "../tap_amplitude/tap.py",
+            "cwd": "/Users/pechi/hotglue/tap-amplitude/.secrets/",
+            "args": [
+                "--config",
+                "config.json",
+                "--discover>catalog.json"
+            ],
+            "python": "/Users/pechi/hotglue/tap-amplitude/env/bin/python",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "tap get",
+            "type": "python",
+            "request": "launch",
+            "program": "../tap_amplitude/tap.py",
+            "cwd": "/Users/pechi/hotglue/tap-amplitude/.secrets/",
+            "args": [
+                "--config",
+                "config.json",
+                "--catalog",
+                "properties.json>data.txt"
+            ],
+            "justMyCode": false,
+            "python": "/Users/pechi/hotglue/tap-amplitude/env/bin/python",
+            "console": "integratedTerminal"
+        },
+    ]
+}
