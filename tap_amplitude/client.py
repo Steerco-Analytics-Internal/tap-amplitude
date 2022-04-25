@@ -2,42 +2,26 @@
 import base64
 import requests
 import gzip
-import json
 from pathlib import Path
-from typing import Any, Dict, Optional, Union, List, Iterable, cast
+from typing import Any, Dict, Optional, Iterable, cast
 from io import BytesIO
 from zipfile import ZipFile
 from datetime import datetime, timedelta
-from memoization import cached
+
 import orjson
 import pendulum
 import urllib.parse
 
-from singer_sdk.helpers.jsonpath import extract_jsonpath
 from singer_sdk.streams import RESTStream
 from singer_sdk.authenticators import BasicAuthenticator
 
 
-SCHEMAS_DIR = Path(__file__).parent / Path("./schemas")
-
-
 class AmplitudeStream(RESTStream):
     """Amplitude stream class."""
-
-    # TODO: Set the API's base URL here:
     
     AMPLITUDE_DATETIME_FORMAT = "%Y%m%dT%H"
     url_base = "https://amplitude.com/api/2/export"
-    start_date = "Df"
-    # OR use a dynamic url_base:
-    # @property
-    # def url_base(self) -> str:
-    #     """Return the API URL root, configurable via tap settings."""
-    #     return self.config["api_url"]
-
-    # records_jsonpath = "$[*]"  # Or override `parse_response`.
-    # next_page_token_jsonpath = "$.next_page"  # Or override `get_next_page_token`.
-
+    
     @property
     def authenticator(self) -> BasicAuthenticator:
         """Return a new authenticator object."""
@@ -66,8 +50,6 @@ class AmplitudeStream(RESTStream):
         headers = {}
         if "user_agent" in self.config:
             headers["User-Agent"] = self.config.get("user_agent")
-        # If not using an authenticator, you may also provide inline auth headers:
-        # headers["Private-Token"] = self.config.get("auth_token")
         headers['Authorization'] = f"Basic {base64encoded}"
         return headers
 
@@ -76,24 +58,15 @@ class AmplitudeStream(RESTStream):
         self, response: requests.Response, previous_token: Optional[Any]
     ) -> Optional[Any]:
         """Return a token for identifying next page or None if no more pages."""
-        # TODO: If pagination is required, return a token which can be used to get the
-        #       next page. If this is the final page, return "None" to end the
-        #       pagination loop.
-        if self.next_page_token_jsonpath:
-            all_matches = extract_jsonpath(
-                self.next_page_token_jsonpath, response.json()
-            )
-            first_match = next(iter(all_matches), None)
-            next_page_token = first_match
-        else:
-            parsed = urllib.parse.urlparse(response.url)
-            end = urllib.parse.parse_qs(parsed.query).get("end")
+       
+        parsed = urllib.parse.urlparse(response.url)
+        end = urllib.parse.parse_qs(parsed.query).get("end")
 
-            end = cast(datetime, pendulum.parse(end[0]))
-            end = end.replace(tzinfo=None) 
-            if end > datetime.today():
-                return None
-            return end.strftime("%Y%m%dT00") , (end + timedelta(self.window)).strftime("%Y%m%dT00")
+        end = cast(datetime, pendulum.parse(end[0]))
+        end = end.replace(tzinfo=None) 
+        if end > datetime.today():
+            return None
+        return end.strftime("%Y%m%dT00") , (end + timedelta(self.window)).strftime("%Y%m%dT00")
 
     def get_url_params(
         self, context: Optional[dict], next_page_token: Optional[Any]
@@ -116,20 +89,9 @@ class AmplitudeStream(RESTStream):
 
         return params
 
-    def prepare_request_payload(
-        self, context: Optional[dict], next_page_token: Optional[Any]
-    ) -> Optional[dict]:
-        """Prepare the data payload for the REST API request.
-
-        By default, no payload will be sent (return None).
-        """
-        # TODO: Delete this method if no payload is required. (Most REST APIs.)
-        return None
-
     def parse_response(self, response: requests.Response) -> Iterable[dict]:
         """Parse the response and return an iterator of result rows."""
-        # TODO: Parse response body and return a set of records.
-        # ZIP PROCESSING
+        
         zipfile = ZipFile(BytesIO(response.content))
         data = []
         for file_name in zipfile.namelist():
@@ -141,10 +103,3 @@ class AmplitudeStream(RESTStream):
                     if "" == line.strip():
                         continue
                     yield orjson.loads(line)
-    
-        # yield from extract_jsonpath(self.records_jsonpath, input=data)
-
-    def post_process(self, row: dict, context: Optional[dict]) -> dict:
-        """As needed, append or transform raw data to match expected structure."""
-        # TODO: Delete this method if not needed.
-        return row
