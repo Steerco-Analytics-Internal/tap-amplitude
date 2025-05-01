@@ -8,9 +8,10 @@ from tap_amplitude.client import AmplitudeStream
 class EventStream(AmplitudeStream):
 
     name = "events"
-    path = ""
+    path = "export"
     primary_keys = ["event_id"]
-
+    replication_key = "server_upload_time"
+    
     schema = th.PropertiesList(
         th.Property('app', th.IntegerType),
         th.Property('device_id', th.StringType),
