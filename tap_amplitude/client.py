@@ -20,8 +20,13 @@ class AmplitudeStream(RESTStream):
     """Amplitude stream class."""
     
     AMPLITUDE_DATETIME_FORMAT = "%Y%m%dT%H"
-    url_base = "https://amplitude.com/api/2/export"
-    
+
+    @property
+    def url_base(self) -> str:
+        if self.config.get("is_eu_region") == True:
+            return "https://analytics.eu.amplitude.com/api/2/"
+        return "https://amplitude.com/api/2/"
+
     @property
     def authenticator(self) -> BasicAuthenticator:
         """Return a new authenticator object."""
@@ -31,9 +36,16 @@ class AmplitudeStream(RESTStream):
             password=self.config.get("secret_key"),
         )
 
-    @property
-    def start_date(self):
-        return self.config.get("start_date")
+    def start_date(self, context: Optional[dict] = None):
+        if self.replication_key:
+            bookmarked_replication_key_value = self.get_starting_replication_key_value(context)
+            if bookmarked_replication_key_value:
+                bookmarked_replication_key_value = pendulum.parse(bookmarked_replication_key_value)
+                return bookmarked_replication_key_value
+        if self.config.get("start_date"):
+            return pendulum.parse(self.config.get("start_date"))
+        
+        return pendulum.parse("2020-01-01T00:00:00.000Z")
     
     @property
     def window(self):
@@ -74,8 +86,8 @@ class AmplitudeStream(RESTStream):
         """Return a dictionary of values to be used in URL parameterization."""
         params: dict = {}
         if not next_page_token:
-            start_date = self.config.get("start_date")
-            start_date = cast(datetime, pendulum.parse(start_date))
+            start_date = self.start_date(context)
+            start_date = cast(datetime, start_date)
             params["start"] = start_date.strftime("%Y%m%dT00")
             params["end"] = (start_date + timedelta(self.window)).strftime("%Y%m%dT00")
 
@@ -91,9 +103,10 @@ class AmplitudeStream(RESTStream):
 
     def parse_response(self, response: requests.Response) -> Iterable[dict]:
         """Parse the response and return an iterator of result rows."""
-        
+        if self.is_no_data_found_error(response):
+            yield from []
+            return
         zipfile = ZipFile(BytesIO(response.content))
-        data = []
         for file_name in zipfile.namelist():
             with zipfile.open(file_name) as gz_file:
                 gz_content = gz_file.read()
@@ -103,3 +116,13 @@ class AmplitudeStream(RESTStream):
                     if "" == line.strip():
                         continue
                     yield orjson.loads(line)
+
+    def validate_response(self, response: requests.Response) -> None:
+        if self.is_no_data_found_error(response):
+            self.logger.warning(f"No data found for given request {response.request.url}")
+            return
+        super().validate_response(response)
+
+
+    def is_no_data_found_error(self, response: requests.Response) -> bool:
+        return response.status_code == 404 and "Raw data files were not found" in response.text
