@@ -2,52 +2,67 @@
 
 from typing import List
 
-from singer_sdk import Tap, Stream
-from singer_sdk import typing as th  # JSON schema typing helpers
+from singer_sdk import Stream, Tap
+from singer_sdk import typing as th
 
-from tap_amplitude.streams import (
-    AmplitudeStream,
-    EventStream
-)
+from tap_amplitude.streams import EventStream
 
-STREAM_TYPES = [
-    EventStream
-]
+STREAM_TYPES = [EventStream]
 
 
 class TapAmplitude(Tap):
     """Amplitude tap class."""
+
     name = "tap-amplitude"
 
-    # TODO: Update this section with the actual config values you expect:
     config_jsonschema = th.PropertiesList(
         th.Property(
             "api_key",
             th.StringType,
             required=True,
-            description="The token to authenticate against the API service"
+            description="Amplitude project API key",
         ),
         th.Property(
             "secret_key",
             th.StringType,
             required=True,
-            description="Secret token to Authenticate"
+            description="Amplitude project secret key",
         ),
         th.Property(
             "start_date",
             th.DateTimeType,
-            description="The earliest record date to sync"
+            description="The earliest record date to sync",
         ),
         th.Property(
             "window_days",
             th.IntegerType,
             default=5,
-            description="Window Period"
+            description="Window of days fetched per Export API request",
+        ),
+        th.Property(
+            "is_eu_region",
+            th.BooleanType,
+            default=False,
+            description="Set to true for EU-region Amplitude projects",
+        ),
+        th.Property(
+            "discovery_window_hours",
+            th.IntegerType,
+            default=24,
+            description=(
+                "Hours of recent events to sample during discovery to infer "
+                "user_properties / event_properties shape"
+            ),
+        ),
+        th.Property(
+            "discovery_max_events",
+            th.IntegerType,
+            default=5000,
+            description="Maximum events to scan during discovery",
         ),
     ).to_dict()
 
     def discover_streams(self) -> List[Stream]:
-        """Return a list of discovered streams."""
         return [stream_class(tap=self) for stream_class in STREAM_TYPES]
 
 
