@@ -6,28 +6,9 @@ Built with the [Meltano Tap SDK](https://sdk.meltano.com) for Singer Taps.
 
 ## Steerco fork
 
-This is a Steerco fork of [hotglue/tap-amplitude](https://gitlab.com/hotglue/tap-amplitude).
-The upstream tap declares `user_properties`, `event_properties`, and other
-nested objects with empty schemas, which causes Singer SDK to silently strip
-every property they contain — Amplitude has no schema registry on non-Enterprise
-plans, so the upstream tap can't pre-declare what fields exist.
+Forked from [hotglue/tap-amplitude](https://gitlab.com/hotglue/tap-amplitude). Adds sample-based discovery for `user_properties`, `event_properties`, and other nested object fields — upstream declares them empty, so Singer SDK strips every property they contain.
 
-This fork performs **sample-based discovery** at `--discover` time: it fetches
-a recent window of events from the same Export endpoint the sync uses, unions
-the keys observed in each nested object, and infers types from the values seen.
-Discovery falls back to a permissive (`additional_properties=True`) schema if
-the sample window is empty or the request fails — so unknown properties always
-flow through instead of being dropped.
-
-### Discovery config
-
-| Option                   | Default | Description                                                |
-| ------------------------ | ------- | ---------------------------------------------------------- |
-| `discovery_window_hours` | `24`    | Hours of recent events to sample during discovery          |
-| `discovery_max_events`   | `5000`  | Maximum events scanned per discovery run                   |
-
-Discovery affects only the **schema** — the sync window is still controlled
-by `start_date` and `window_days`.
+Two new config options control sampling: `discovery_window_hours` (default 24) and `discovery_max_events` (default 5000).
 
 ## Installation
 
