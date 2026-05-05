@@ -107,13 +107,13 @@ def _infer_type(value: Any) -> Optional[str]:
 
 
 def _resolve_type(key: str, types: Set[str]) -> th.JSONTypeHelper:
-    if not types:
+    if not types or types == {"string"}:
         return th.StringType()
     if types == {"boolean"}:
         return th.BooleanType()
     if types == {"integer"}:
         return th.IntegerType()
-    if types <= {"integer", "number"}:
+    if types == {"number"} or types <= {"integer", "number"}:
         return th.NumberType()
     if types == {"array"}:
         return th.ArrayType(th.AnyType())
@@ -155,21 +155,20 @@ def _build_object_schema(keys_by_type: Dict[str, Set[str]]) -> th.ObjectType:
     return th.ObjectType(*properties, additional_properties=True)
 
 
-def discover_nested_schemas(
+def discover_field_keys(
     config: Dict[str, Any],
-) -> Dict[str, th.ObjectType]:
-    """Sample recent events and return an ObjectType per nested field.
+) -> Tuple[Dict[str, Dict[str, Set[str]]], int]:
+    """Sample recent events and return raw {field: {key: types}} per nested field.
 
-    Falls back to a permissive (additional_properties=True) ObjectType if the
-    sample is empty or the request fails — so unknown properties still flow
-    through instead of being silently dropped by Singer SDK validation.
+    Returns ({}, 0) when sampling fails or yields nothing — caller should
+    fall back to a permissive schema in that case.
     """
 
-    permissive = {field: th.ObjectType(additional_properties=True) for field in NESTED_OBJECT_FIELDS}
+    empty: Dict[str, Dict[str, Set[str]]] = {field: {} for field in NESTED_OBJECT_FIELDS}
 
     if not config.get("api_key") or not config.get("secret_key"):
-        logger.warning("Amplitude credentials missing; using permissive schemas")
-        return permissive
+        logger.warning("Amplitude credentials missing; skipping discovery sample")
+        return empty, 0
 
     window_hours = int(config.get("discovery_window_hours") or DEFAULT_WINDOW_HOURS)
     max_events = int(config.get("discovery_max_events") or DEFAULT_MAX_EVENTS)
@@ -178,19 +177,32 @@ def discover_nested_schemas(
         events = _iter_sample_events(config, window_hours, max_events)
         field_keys, scanned = _scan_keys(events)
     except requests.RequestException as exc:
-        logger.warning("Amplitude discovery sample failed: %s; using permissive schemas", exc)
-        return permissive
-    except Exception as exc:
-        logger.warning("Amplitude discovery raised %s; using permissive schemas", exc)
-        return permissive
+        logger.warning("Amplitude discovery sample failed: %s", exc)
+        return empty, 0
+    except Exception as exc:  # noqa: BLE001 - safe fallback path
+        logger.warning("Amplitude discovery raised %s", exc)
+        return empty, 0
 
     if scanned == 0:
-        logger.warning("Amplitude discovery sample returned 0 events; using permissive schemas")
-        return permissive
+        logger.warning("Amplitude discovery sample returned 0 events")
+        return empty, 0
 
+    return {field: dict(field_keys[field]) for field in NESTED_OBJECT_FIELDS}, scanned
+
+
+def discover_nested_schemas(
+    config: Dict[str, Any],
+) -> Dict[str, th.ObjectType]:
+    """Sample recent events and return an ObjectType per nested field.
+
+    Falls back to a permissive (additional_properties=True) ObjectType if the
+    sample is empty or the request fails.
+    """
+
+    field_keys, scanned = discover_field_keys(config)
     schemas: Dict[str, th.ObjectType] = {}
     for field in NESTED_OBJECT_FIELDS:
-        keys = field_keys[field]
+        keys = field_keys.get(field) or {}
         if not keys:
             schemas[field] = th.ObjectType(additional_properties=True)
         else:

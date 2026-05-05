@@ -3,7 +3,15 @@
 from singer_sdk import typing as th  # JSON Schema typing helpers
 
 from tap_amplitude.client import AmplitudeStream
-from tap_amplitude.discovery import NESTED_OBJECT_FIELDS, discover_nested_schemas
+from tap_amplitude.discovery import (
+    NESTED_OBJECT_FIELDS,
+    _build_object_schema,
+    _resolve_type,
+    discover_field_keys,
+)
+
+
+FLATTENING_SEPARATOR = "__"
 
 
 _STATIC_PROPERTIES = [
@@ -57,10 +65,27 @@ _STATIC_PROPERTIES = [
 
 
 def _build_event_schema(config: dict) -> dict:
-    nested = discover_nested_schemas(config)
+    field_keys, scanned = discover_field_keys(config)
+    flatten = bool(config.get("flattening_enabled"))
     properties = list(_STATIC_PROPERTIES)
+
     for field in NESTED_OBJECT_FIELDS:
-        properties.append(th.Property(field, nested[field]))
+        keys = field_keys.get(field) or {}
+        if flatten:
+            for key, types in sorted(keys.items()):
+                properties.append(
+                    th.Property(f"{field}{FLATTENING_SEPARATOR}{key}", _resolve_type(key, types))
+                )
+            # Permissive bag for properties that didn't appear in the sample;
+            # Singer SDK record flattening will still expand them at sync time
+            # given flattening_enabled, but having a typed home for declared
+            # keys is what lets the mapping UI surface them.
+            properties.append(th.Property(field, th.ObjectType(additional_properties=True)))
+        elif keys:
+            properties.append(th.Property(field, _build_object_schema(keys)))
+        else:
+            properties.append(th.Property(field, th.ObjectType(additional_properties=True)))
+
     return th.PropertiesList(*properties).to_dict()
 
 
