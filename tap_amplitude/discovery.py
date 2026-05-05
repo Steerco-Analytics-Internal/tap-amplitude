@@ -79,7 +79,10 @@ def _iter_sample_events(
                 for line in content.split("\n"):
                     if not line.strip():
                         continue
-                    yield orjson.loads(line)
+                    try:
+                        yield orjson.loads(line)
+                    except orjson.JSONDecodeError:
+                        continue
                     yielded += 1
                     if yielded >= max_events:
                         return
@@ -103,21 +106,25 @@ def _infer_type(value: Any) -> Optional[str]:
     return "string"
 
 
-def _resolve_type(types: Set[str]) -> th.JSONTypeHelper:
-    types.discard(None)
+def _resolve_type(key: str, types: Set[str]) -> th.JSONTypeHelper:
     if not types:
-        return th.StringType
+        return th.StringType()
     if types == {"boolean"}:
-        return th.BooleanType
+        return th.BooleanType()
     if types == {"integer"}:
-        return th.IntegerType
+        return th.IntegerType()
     if types <= {"integer", "number"}:
-        return th.NumberType
+        return th.NumberType()
     if types == {"array"}:
-        return th.ArrayType(th.StringType)
+        return th.ArrayType(th.AnyType())
     if types == {"object"}:
         return th.ObjectType(additional_properties=True)
-    return th.StringType
+    logger.info(
+        "Mixed types %s observed for property %s; coercing to string",
+        sorted(types),
+        key,
+    )
+    return th.StringType()
 
 
 def _scan_keys(
@@ -142,7 +149,7 @@ def _scan_keys(
 
 def _build_object_schema(keys_by_type: Dict[str, Set[str]]) -> th.ObjectType:
     properties = [
-        th.Property(key, _resolve_type(types))
+        th.Property(key, _resolve_type(key, types))
         for key, types in sorted(keys_by_type.items())
     ]
     return th.ObjectType(*properties, additional_properties=True)

@@ -51,7 +51,9 @@ class TapAmplitude(Tap):
             default=24,
             description=(
                 "Hours of recent events to sample during discovery to infer "
-                "user_properties / event_properties shape"
+                "user_properties / event_properties shape. The Export endpoint "
+                "returns the full window in one ZIP; high-volume projects "
+                "should keep this small to bound discovery memory use."
             ),
         ),
         th.Property(
