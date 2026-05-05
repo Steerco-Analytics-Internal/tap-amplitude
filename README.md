@@ -4,6 +4,12 @@
 
 Built with the [Meltano Tap SDK](https://sdk.meltano.com) for Singer Taps.
 
+## Steerco fork
+
+Forked from [hotglue/tap-amplitude](https://gitlab.com/hotglue/tap-amplitude). Adds sample-based discovery for `user_properties`, `event_properties`, and other nested object fields — upstream declares them empty, so Singer SDK strips every property they contain.
+
+Two new config options control sampling: `discovery_window_hours` (default 24) and `discovery_max_events` (default 5000).
+
 ## Installation
 
 - [ ] `Developer TODO:` Update the below as needed to correctly describe the install procedure. For instance, if you do not have a PyPi repo, or if you want users to directly install from your git repo, you can modify this step as appropriate.
