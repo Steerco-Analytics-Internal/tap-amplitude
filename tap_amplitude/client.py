@@ -14,6 +14,19 @@ import urllib.parse
 
 from singer_sdk.streams import RESTStream
 from singer_sdk.authenticators import BasicAuthenticator
+from singer_sdk.exceptions import RetriableAPIError
+
+
+# Local file header signature for a non-empty zip; an empty archive starts
+# with PK\x05\x06 (end-of-central-dir) but Amplitude's Export endpoint
+# returns 404 + "Raw data files were not found" for empty windows, so we
+# never expect a valid empty zip on a 200 response.
+ZIP_MAGIC = b"PK\x03\x04"
+
+
+def looks_like_zip(content: bytes) -> bool:
+    """Return True if `content` starts with the standard ZIP magic bytes."""
+    return content[:4] == ZIP_MAGIC
 
 
 class AmplitudeStream(RESTStream):
@@ -123,6 +136,19 @@ class AmplitudeStream(RESTStream):
             return
         super().validate_response(response)
 
+        # Amplitude's Export API returns a ZIP body on success. We've seen
+        # 200 OK responses with non-ZIP bodies (rate-limit messages, edge
+        # error pages, truncated downloads) — feeding those into
+        # `ZipFile(...)` raises BadZipFile and crashes the whole sync.
+        # Treat them as retriable so singer-sdk's backoff handles them.
+        if response.status_code == 200 and not looks_like_zip(response.content):
+            content_type = response.headers.get("Content-Type")
+            head = response.content[:64]
+            raise RetriableAPIError(
+                f"Amplitude Export returned 200 but body is not a ZIP "
+                f"(Content-Type={content_type!r}, head={head!r})",
+                response,
+            )
 
     def is_no_data_found_error(self, response: requests.Response) -> bool:
         return response.status_code == 404 and "Raw data files were not found" in response.text

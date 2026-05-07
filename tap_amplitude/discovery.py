@@ -24,6 +24,8 @@ import orjson
 import requests
 from singer_sdk import typing as th
 
+from tap_amplitude.client import looks_like_zip
+
 logger = logging.getLogger(__name__)
 
 NESTED_OBJECT_FIELDS = (
@@ -70,6 +72,15 @@ def _iter_sample_events(
         logger.warning("Amplitude returned 404 (no data) for discovery window")
         return
     response.raise_for_status()
+
+    if not looks_like_zip(response.content):
+        logger.warning(
+            "Amplitude discovery sample returned a non-ZIP 200 body "
+            "(Content-Type=%s, head=%r); skipping sample",
+            response.headers.get("Content-Type"),
+            response.content[:64],
+        )
+        return
 
     yielded = 0
     with ZipFile(BytesIO(response.content)) as zf:
