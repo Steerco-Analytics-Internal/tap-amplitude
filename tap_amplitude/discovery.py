@@ -40,6 +40,7 @@ NESTED_OBJECT_FIELDS = (
 
 DEFAULT_WINDOW_HOURS = 24
 DEFAULT_MAX_EVENTS = 5000
+DISCOVERY_REQUEST_TIMEOUT_SECONDS = 600
 
 
 def _build_export_url(config: Dict[str, Any], start: datetime, end: datetime) -> str:
@@ -67,7 +68,11 @@ def _iter_sample_events(
         url,
         max_events,
     )
-    response = requests.get(url, headers={"Authorization": _auth_header(config)}, timeout=120)
+    response = requests.get(
+        url,
+        headers={"Authorization": _auth_header(config)},
+        timeout=DISCOVERY_REQUEST_TIMEOUT_SECONDS,
+    )
     if response.status_code == 404 and "Raw data files were not found" in response.text:
         logger.warning("Amplitude returned 404 (no data) for discovery window")
         return
