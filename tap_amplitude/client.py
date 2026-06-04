@@ -51,13 +51,24 @@ class AmplitudeStream(RESTStream):
 
     def start_date(self, context: Optional[dict] = None):
         if self.replication_key:
-            bookmarked_replication_key_value = self.get_starting_replication_key_value(context)
-            if bookmarked_replication_key_value:
-                bookmarked_replication_key_value = pendulum.parse(bookmarked_replication_key_value)
-                return bookmarked_replication_key_value
+            state = self.get_context_state(context)
+
+            # Finalized bookmark from a clean prior run.
+            finalized = state.get("replication_key_value")
+            if finalized and state.get("replication_key") == self.replication_key:
+                return pendulum.parse(finalized)
+
+            # Resume point from a prior run that crashed before finalizing.
+            # Without this, an interrupted sync forces the next run back to
+            # config.start_date and we re-fetch everything from scratch.
+            progress = state.get("progress_markers", {})
+            in_flight = progress.get("replication_key_value")
+            if in_flight and progress.get("replication_key") == self.replication_key:
+                return pendulum.parse(in_flight)
+
         if self.config.get("start_date"):
             return pendulum.parse(self.config.get("start_date"))
-        
+
         return pendulum.parse("2020-01-01T00:00:00.000Z")
     
     @property
