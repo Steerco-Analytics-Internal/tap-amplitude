@@ -34,6 +34,16 @@ class TapAmplitude(Tap):
             description="The earliest record date to sync",
         ),
         th.Property(
+            "min_start_date",
+            th.DateTimeType,
+            description=(
+                "Hard floor on the effective sync start. Applied after state "
+                "and start_date are resolved; if the resolved start is older "
+                "than this, it is clamped up to this value. Survives runtime "
+                "rewrites of start_date (e.g. hotglue's override_start_date)."
+            ),
+        ),
+        th.Property(
             "window_days",
             th.IntegerType,
             default=5,
