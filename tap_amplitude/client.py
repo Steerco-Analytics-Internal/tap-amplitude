@@ -50,6 +50,21 @@ class AmplitudeStream(RESTStream):
         )
 
     def start_date(self, context: Optional[dict] = None):
+        resolved = self._resolve_start_date(context)
+
+        # Floor against min_start_date if configured. Hotglue's
+        # override_start_date rewrites config.start_date and wipes state,
+        # which can rewind syncs by months. min_start_date is an ordinary
+        # config field the runtime does not touch, so it survives the
+        # rewrite and clamps the effective start forward.
+        floor = self.config.get("min_start_date")
+        if floor:
+            floor_dt = pendulum.parse(floor)
+            if resolved < floor_dt:
+                return floor_dt
+        return resolved
+
+    def _resolve_start_date(self, context: Optional[dict] = None):
         if self.replication_key:
             state = self.get_context_state(context)
 
